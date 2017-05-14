@@ -2,14 +2,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import LabelBinarizer
+from sklearn.preprocessing import LabelBinarizer, LabelEncoder
 from sklearn import model_selection, preprocessing
 import xgboost as xgb
 import datetime
 #now = datetime.datetime.now()
 
-train = pd.read_csv('input/train.csv')#.head(100)
-test = pd.read_csv('input/test.csv')#.head(100)
+train = pd.read_csv('input/train.csv').head(100)
+test = pd.read_csv('input/test.csv').head(100)
 
 
 def one_hot_encoder(q1_train, q2_train, q1_test, q2_test):
@@ -19,10 +19,20 @@ def one_hot_encoder(q1_train, q2_train, q1_test, q2_test):
 
     return lb.transform(q1_train), lb.transform(q2_train), lb.transform(q1_test), lb.transform(q2_test)
 
+
+# def label_encoder(x_train, x_test):
+#
+#     # lb = LabelEncoder()
+#     # lb.fit(list(q1_train) + list(q2_train) + list(q1_test) + list(q2_test))
+#     #
+#     # return lb.transform(q1_train), lb.transform(q2_train), lb.transform(q1_test), lb.transform(q2_test)
+
 q1_trn, q2_trn, q1_tst, q2_tst = one_hot_encoder(train["question1"].values, train["question2"].values, test["question1"], test["question2"])
+#q1_trn, q2_trn, q1_tst, q2_tst = label_encoder(train["question1"].values, train["question2"].values, test["question1"], test["question2"])
 
 print("Transformation complete")
-
+print(q1_trn)
+exit()
 voc = np.shape(q1_trn)[1]
 
 X = pd.concat((pd.DataFrame(q1_trn, columns=["q1_" + str(i) for i in range(voc)]), pd.DataFrame(q2_trn, columns=["q2_" + str(i) for i in range(voc)])),axis=1)
@@ -30,7 +40,7 @@ Y = train["is_duplicate"]
 
 X_test = pd.concat((pd.DataFrame(q1_tst, columns=["q1_" + str(i) for i in range(voc)]), pd.DataFrame(q2_tst, columns=["q2_" + str(i) for i in range(voc)])),axis=1)
 
-xgb_params = {#
+xgb_params = {
 
     'eta': 0.05,
     'max_depth': 5,
