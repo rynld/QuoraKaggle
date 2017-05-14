@@ -30,7 +30,7 @@ Y = train["is_duplicate"]
 
 X_test = pd.concat((pd.DataFrame(q1_tst, columns=["q1_" + str(i) for i in range(voc)]), pd.DataFrame(q2_tst, columns=["q2_" + str(i) for i in range(voc)])),axis=1)
 
-xgb_params = {
+xgb_params = {#
 
     'eta': 0.05,
     'max_depth': 5,
