@@ -9,21 +9,24 @@ import xgboost as xgb
 import datetime
 #now = datetime.datetime.now()
 
-train = pd.read_csv('input/train.csv').head(1000)
-test = pd.read_csv('input/test.csv').head(10)
+train = pd.read_csv('input/train.csv')#.head(1000)
+test = pd.read_csv('input/test.csv')#.head(10)
 
 
-tf = TfidfVectorizer(analyzer="word", stop_words="english", ngram_range=(1,2))
+tf = TfidfVectorizer(analyzer="word", stop_words="english")
+train["question1"] = train["question1"].astype(str)
+train["question2"] = train["question2"].astype(str)
+test["question1"] = test["question1"].astype(str)
+test["question2"] = test["question2"].astype(str)
 
-tf.fit(train["question1"].values)
-print(tf.get_feature_names())
-print(tf.transform(["question for brain", "donald trump"]))
-exit()
-train["q1"] = train["question1"].map(lambda x: len(str(x).split(" ")))
-train["q2"] = train["question2"].map(lambda x: len(str(x).split(" ")))
+tf.fit(list(train["question1"].values) + list(train["question2"].values) + list(test["question1"].values) + list(test["question2"].values))
 
-test["q1"] = test["question1"].map(lambda x: len(str(x).split(" ")))
-test["q2"] = test["question2"].map(lambda x: len(str(x).split(" ")))
+
+train["q1_len"] = train["question1"].map(lambda x: len(str(x).split(" ")))
+train["q2_len"] = train["question2"].map(lambda x: len(str(x).split(" ")))
+
+test["q1_len"] = test["question1"].map(lambda x: len(str(x).split(" ")))
+test["q2_len"] = test["question2"].map(lambda x: len(str(x).split(" ")))
 
 
 
