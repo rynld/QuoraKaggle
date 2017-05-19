@@ -1,33 +1,54 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.preprocessing import LabelBinarizer, LabelEncoder
-from sklearn import model_selection, preprocessing
 from sklearn.feature_extraction.text import TfidfVectorizer
 import xgboost as xgb
 import datetime
-#now = datetime.datetime.now()
+from TextFunctionality import *
+from Algo import *
 
-train = pd.read_csv('input/train.csv')#.head(1000)
-test = pd.read_csv('input/test.csv')#.head(10)
+train = pd.read_csv('input/train.csv', dtype=str)#.head(100)
+test = pd.read_csv('input/test.csv', dtype=str)#.head(100)
 
+test_id = test["test_id"]
+test.drop("test_id", axis=1, inplace=True)
+
+
+def clean_text(df):
+
+    df.fillna("", inplace=True)
+    df["question1"] = df["question1"].map(lambda x: text_to_wordlist(x, stem_words=True))
+    df["question2"] = df["question2"].map(lambda x: text_to_wordlist(x, stem_words=True))
+
+clean_text(train)
+clean_text(test)
 
 tf = TfidfVectorizer(analyzer="word", stop_words="english")
-train["question1"] = train["question1"].astype(str)
-train["question2"] = train["question2"].astype(str)
-test["question1"] = test["question1"].astype(str)
-test["question2"] = test["question2"].astype(str)
-
 tf.fit(list(train["question1"].values) + list(train["question2"].values) + list(test["question1"].values) + list(test["question2"].values))
 
 
-train["q1_len"] = train["question1"].map(lambda x: len(str(x).split(" ")))
-train["q2_len"] = train["question2"].map(lambda x: len(str(x).split(" ")))
+def add_features(df):
 
-test["q1_len"] = test["question1"].map(lambda x: len(str(x).split(" ")))
-test["q2_len"] = test["question2"].map(lambda x: len(str(x).split(" ")))
+    df["q1_len"] = df["question1"].map(lambda x: len(str(x).split(" ")))
+    df["q2_len"] = df["question2"].map(lambda x: len(str(x).split(" ")))
 
+    df["cosine_sim"] = df.apply(lambda row: cosine_similarity(tf.transform([row["question1"]]).todense(),
+                                                              tf.transform([row["question2"]]).todense()), axis = 1)
+
+    df["manhattan_sim"] = df.apply(lambda row: minkosky_distance(tf.transform([row["question1"]]).todense(),
+                                                              tf.transform([row["question2"]]).todense(), 1), axis=1)
+
+    df["euclidean_sim"] = df.apply(lambda row: minkosky_distance(tf.transform([row["question1"]]).todense(),
+                                                                  tf.transform([row["question2"]]).todense(), 1), axis=1)
+
+    df.drop(["question1", "question2"], axis=1, inplace=True)
+
+    for c in ["qid1", "qid2", "id"]:
+        if c in df.columns:
+            df.drop(c, axis=1, inplace=True)
+
+
+add_features(train)
+add_features(test)
 
 
 xgb_params = {
@@ -41,8 +62,8 @@ xgb_params = {
     'silent': 1
 }
 
-dtrain = xgb.DMatrix(train[["q1","q2"]].values, train["is_duplicate"])
-dtest = xgb.DMatrix(test[["q1","q2"]].values)
+dtrain = xgb.DMatrix(train.drop("is_duplicate", axis=1).values, train["is_duplicate"].astype(float).values)
+dtest = xgb.DMatrix(test.values)
 
 cv_output = xgb.cv(xgb_params, dtrain, num_boost_round=1000, early_stopping_rounds=20,
     verbose_eval=50)
@@ -54,7 +75,7 @@ model = xgb.train(dict(xgb_params), dtrain, num_boost_round= num_boost_rounds)
 
 y_predict = model.predict(dtest)
 
-output = pd.DataFrame({'test_id': test["test_id"], 'is_duplicate': y_predict})
+output = pd.DataFrame({'test_id': test_id, 'is_duplicate': y_predict})
 
 current_date = datetime.datetime.now()
 output.to_csv('output/xgbSub{0}-{1}-{2}-{3}.csv'.format(current_date.day,current_date.hour,current_date.minute,current_date.second), index=False)
