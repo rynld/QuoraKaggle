@@ -13,3 +13,11 @@ def jaccard_similarity(x, y):
 
 def minkosky_distance(x, y, p=1):
     return spatial.distance.minkowski(x, y, p)
+
+
+def common_words(x, y):
+    return len(set(x).intersection(set(y)))
+
+
+def diff_words(x, y):
+    return len(x) - common_words(x,y)

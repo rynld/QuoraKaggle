@@ -2,36 +2,35 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import LabelBinarizer, LabelEncoder
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn import model_selection, preprocessing
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import StratifiedKFold
 import xgboost as xgb
 import datetime
 #now = datetime.datetime.now()
 
-train = pd.read_csv('input/train.csv').head(100)
+train = pd.read_csv('input/train.csv').head(10)
 test = pd.read_csv('input/test.csv').head(100)
 
 
-def one_hot_encoder(q1_train, q2_train, q1_test, q2_test):
 
-    lb = LabelBinarizer()
-    lb.fit(list(q1_train) + list(q2_train) + list(q1_test) + list(q2_test))
+res = CountVectorizer(stop_words="english").fit_transform(train["question1"].values + train["question2"].values)
 
-    return lb.transform(q1_train), lb.transform(q2_train), lb.transform(q1_test), lb.transform(q2_test)
+for train_index, test_index in StratifiedKFold(n_splits=5, shuffle=True).split(res, train["is_duplicate"].values):
+    LogisticRegression
 
 
-# def label_encoder(x_train, x_test):
-#
-#     # lb = LabelEncoder()
-#     # lb.fit(list(q1_train) + list(q2_train) + list(q1_test) + list(q2_test))
-#     #
-#     # return lb.transform(q1_train), lb.transform(q2_train), lb.transform(q1_test), lb.transform(q2_test)
 
-q1_trn, q2_trn, q1_tst, q2_tst = one_hot_encoder(train["question1"].values, train["question2"].values, test["question1"], test["question2"])
-#q1_trn, q2_trn, q1_tst, q2_tst = label_encoder(train["question1"].values, train["question2"].values, test["question1"], test["question2"])
+lr = LogisticRegression()
+lr.fit(res, train["is_duplicate"].values)
+
+print(np.shape(res))
+
+exit()
 
 print("Transformation complete")
-print(q1_trn)
+
 exit()
 voc = np.shape(q1_trn)[1]
 
