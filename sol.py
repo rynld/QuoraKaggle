@@ -4,66 +4,46 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn import model_selection, preprocessing
+from sklearn.metrics import log_loss
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
-import xgboost as xgb
 import datetime
-#now = datetime.datetime.now()
 
-train = pd.read_csv('input/train.csv').head(10)
+
+train = pd.read_csv('input/train.csv', dtype={"question1":str,"question2":str}).head(1000)
 test = pd.read_csv('input/test.csv').head(100)
 
-
+train.fillna("", inplace=True)
 
 res = CountVectorizer(stop_words="english").fit_transform(train["question1"].values + train["question2"].values)
 
-for train_index, test_index in StratifiedKFold(n_splits=5, shuffle=True).split(res, train["is_duplicate"].values):
-    LogisticRegression
+pred = []
+for train_index, test_index in StratifiedKFold(n_splits=8).split(res, train["is_duplicate"].values):
+    lr = LogisticRegression()
+    lr.fit(res[train_index], train["is_duplicate"].values[train_index])
+    y_pred = lr.predict_proba(res[test_index])
+
+    pred.append(log_loss(train["is_duplicate"].values[test_index], y_pred))
 
 
+print(np.mean(pred))
 
-lr = LogisticRegression()
-lr.fit(res, train["is_duplicate"].values)
 
-print(np.shape(res))
+print("-"*20)
 
-exit()
 
-print("Transformation complete")
+bag_of_words = CountVectorizer(stop_words="english")
+bag_of_words.fit_transform(train["question1"].values + train["question2"].values)
 
-exit()
-voc = np.shape(q1_trn)[1]
+X = -(bag_of_words.transform(train["question1"].values) != bag_of_words.transform(train["question1"].values)).astype(int)
 
-X = pd.concat((pd.DataFrame(q1_trn, columns=["q1_" + str(i) for i in range(voc)]), pd.DataFrame(q2_trn, columns=["q2_" + str(i) for i in range(voc)])),axis=1)
-Y = train["is_duplicate"]
+pred = []
+for train_index, test_index in StratifiedKFold(n_splits=8).split(X, train["is_duplicate"].values):
+    lr = LogisticRegression()
+    lr.fit(X[train_index], train["is_duplicate"].values[train_index])
+    y_pred = lr.predict_proba(X[test_index])
 
-X_test = pd.concat((pd.DataFrame(q1_tst, columns=["q1_" + str(i) for i in range(voc)]), pd.DataFrame(q2_tst, columns=["q2_" + str(i) for i in range(voc)])),axis=1)
+    pred.append(log_loss(train["is_duplicate"].values[test_index], y_pred))
 
-xgb_params = {
 
-    'eta': 0.05,
-    'max_depth': 5,
-    'subsample': 0.7,
-    'colsample_bytree': 0.7,
-    'objective': 'binary:logistic',
-    'eval_metric': 'logloss',
-    'silent': 1
-}
-
-dtrain = xgb.DMatrix(X, Y)
-dtest = xgb.DMatrix(X_test)
-
-cv_output = xgb.cv(xgb_params, dtrain, num_boost_round=1000, early_stopping_rounds=20,
-    verbose_eval=50)
-
-#cv_output[['train-rmse-mean', 'test-rmse-mean']].plot()
-
-num_boost_rounds = len(cv_output)
-model = xgb.train(dict(xgb_params), dtrain, num_boost_round= num_boost_rounds)
-
-y_predict = model.predict(dtest)
-
-output = pd.DataFrame({'id': test["test_id"], 'price_doc': y_predict})
-
-current_date = datetime.datetime.now()
-output.to_csv('output/xgbSub{0}-{1}-{2}-{3}.csv'.format(current_date.day,current_date.hour,current_date.minute,current_date.second), index=False)
+print(np.mean(pred))

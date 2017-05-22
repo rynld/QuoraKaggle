@@ -22,10 +22,9 @@ def clean_text(df):
 print("Cleaning text")
 
 clean_text(train)
-clean_text(test)
 
 tf = TfidfVectorizer(analyzer="word", stop_words="english")
-tf.fit(list(train["question1"].values) + list(train["question2"].values) + list(test["question1"].values) + list(test["question2"].values))
+tf.fit(list(train["question1"].values) + list(train["question2"].values))
 
 
 def add_features(df):
@@ -35,6 +34,7 @@ def add_features(df):
 
     df["len_diff"] = df["q1_len"] - df["q2_len"]
     df["len_sum"] = df["q1_len"] + df["q2_len"]
+
 
     print("Calculating Simularities")
     df["cosine_sim"] = df.apply(lambda row: cosine_similarity(tf.transform([row["question1"]]).todense(),
@@ -74,9 +74,11 @@ def add_features(df):
             df.drop(c, axis=1, inplace=True)
 
 print("Adding Features")
-add_features(train)
 
+add_features(train)
 train.to_csv("input/train_mod.csv", index=False)
+
+clean_text(test)
 add_features(test)
 test.to_csv("input/test_mod.csv", index=False)
 
