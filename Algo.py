@@ -21,3 +21,12 @@ def common_words(x, y):
 
 def diff_words(x, y):
     return len(x) - common_words(x,y)
+
+
+def word_match_share(x, y):
+    set_a = set(x)
+    set_b = set(y)
+
+    cnt1 = sum([1 for a in set_a if a in set_b])
+    cnt2 = sum([1 for b in set_b if b in set_a])
+    return (cnt1 + cnt2)/(len(x) + len(y) + 0.0)
