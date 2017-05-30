@@ -166,7 +166,7 @@ def tfidf_word_match_share(row, weights=None):
                                                                                     q2words.keys() if w in q1words]
     total_weights = [weights.get(w, 0) for w in q1words] + [weights.get(w, 0) for w in q2words]
 
-    R = np.sum(shared_weights) / np.sum(total_weights)
+    R = np.sum(shared_weights) / (np.sum(total_weights) + 0.001)
     return R
 
 
@@ -252,15 +252,13 @@ def runXgb(X_train, X_valid, y_train, y_valid):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='XGB with Handcrafted Features')
-    parser.add_argument('--save', type=str, default='XGB_leaky',
-                        help='save_file_names')
-    args = parser.parse_args()
 
-    df_train = pd.read_csv('./input/train.csv').head(2000)
+    df_train = pd.read_csv('./input/train.csv')#.head(2000)
     df_train = df_train.fillna(' ')
 
-    df_test = pd.read_csv('./input/test.csv').head(20)
+    df_test = pd.read_csv('./input/test.csv')#.head(20)
+    df_test = df_test.fillna(' ')
+    test_id = df_test["test_id"]
     ques = pd.concat([df_train[['question1', 'question2']], \
                       df_test[['question1', 'question2']]], axis=0).reset_index(drop='index')
     q_dict = defaultdict(set)
@@ -286,7 +284,7 @@ def main():
     df_test['q2_freq'] = df_test.apply(q2_freq, axis=1, raw=True)
 
     test_leaky = df_test.loc[:, ['q1_q2_intersect', 'q1_freq', 'q2_freq']]
-    del df_test
+    #del df_test
 
     train_leaky = df_train.loc[:, ['q1_q2_intersect', 'q1_freq', 'q2_freq']]
 
@@ -304,18 +302,28 @@ def main():
 
     print('Building Features')
     X_train = build_features(df_train, stops, weights)
+
     X_train = pd.concat((X_train, train_leaky), axis=1)
     y_train = df_train['is_duplicate'].values
-    print(X_train.columns)
-    folds = StratifiedKFold(n_splits=5)
-    for train_index, val_inde in folds.split(X_train, y_train):
-        rf = RandomForestClassifier(100)
-        rf.fit(X_train.values[train_index], y_train[train_index])
-        y_pred = rf.predict_proba(X_train.values[val_inde])
-        print(log_loss(y_train[val_inde], y_pred))
 
+    # folds = StratifiedKFold(n_splits=5)
+    # for train_index, val_inde in folds.split(X_train, y_train):
+    #     rf = RandomForestClassifier(100)
+    #     rf.fit(X_train.values[train_index], y_train[train_index])
+    #     y_pred = rf.predict_proba(X_train.values[val_inde])
+    #     print(log_loss(y_train[val_inde], y_pred))
 
-    #train
+    X_test = build_features(df_test, stops, weights)
+    X_test = pd.concat((X_test, test_leaky), axis=1)
+
+    rf = RandomForestClassifier(100)
+    rf.fit(X_train, y_train)
+    pred = rf.predict_proba(X_test)
+
+    res = pd.DataFrame()
+    res["test_id"] = test_id
+    res["is_duplicate"] = pred[:,1]
+    res.to_csv("./submissions/rf.csv", index=False)
 
 if __name__ == '__main__':
     main()
