@@ -13,7 +13,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 from sklearn.ensemble import RandomForestClassifier
-
+from TextFunctionality import text_to_wordlist
 
 def word_match_share(row, stops=None):
     q1words = {}
@@ -61,7 +61,7 @@ def wc_ratio(row):
     l1 = len(row['question1']) * 1.0
     l2 = len(row['question2'])
     if l2 == 0:
-        return np.nan
+        return 0
     if l1 / l2:
         return l2 / l1
     else:
@@ -76,7 +76,7 @@ def wc_ratio_unique(row):
     l1 = len(set(row['question1'])) * 1.0
     l2 = len(set(row['question2']))
     if l2 == 0:
-        return np.nan
+        return 0
     if l1 / l2:
         return l2 / l1
     else:
@@ -92,7 +92,7 @@ def wc_ratio_unique_stop(row, stops=None):
     l1 = len([x for x in set(row['question1']) if x not in stops]) * 1.0
     l2 = len([x for x in set(row['question2']) if x not in stops])
     if l2 == 0:
-        return np.nan
+        return 0
     if l1 / l2:
         return l2 / l1
     else:
@@ -101,7 +101,7 @@ def wc_ratio_unique_stop(row, stops=None):
 
 def same_start_word(row):
     if not row['question1'] or not row['question2']:
-        return np.nan
+        return 0
     return int(row['question1'][0] == row['question2'][0])
 
 
@@ -113,7 +113,7 @@ def char_ratio(row):
     l1 = len(''.join(row['question1']))
     l2 = len(''.join(row['question2']))
     if l2 == 0:
-        return np.nan
+        return 0
     if l1 / l2:
         return l2 / l1
     else:
@@ -211,16 +211,10 @@ def build_features(data, stops, weights):
     return X
 
 
-def runXgb(X_train, y_train, stops, test_leaky, weights):
+def runXgb(X_train, y_train, stops, test_leaky, weights, x_test, test_id):
 
-    params = {}
-    params['objective'] = 'binary:logistic'
-    params['eval_metric'] = 'logloss'
-    params['eta'] = 0.02
-    params['max_depth'] = 7
-    params['subsample'] = 0.6
-    params['silent'] = 1
-    #params['base_score'] = 0.2
+    params = {'objective': 'binary:logistic', 'eval_metric': 'logloss', 'eta': 0.02, 'max_depth': 7, 'subsample': 0.6,
+              'silent': 1, 'base_score': 0.2}
     # params['scale_pos_weight'] = 0.2
 
     d_train = xgb.DMatrix(X_train, label=y_train)
@@ -228,7 +222,7 @@ def runXgb(X_train, y_train, stops, test_leaky, weights):
 
     #watchlist = [(d_train, 'train'), (d_valid, 'valid')]
     print("Training")
-    cv_output = xgb.cv(params, d_train, num_boost_round=1000, early_stopping_rounds=20,
+    cv_output = xgb.cv(params, d_train, num_boost_round=3000, early_stopping_rounds=50,
                        verbose_eval=50)
     # cv_output[['train-rmse-mean', 'test-rmse-mean']].plot()
 
@@ -241,31 +235,62 @@ def runXgb(X_train, y_train, stops, test_leaky, weights):
 
     print('Building Test Features')
 
-    df_test = pd.read_csv('./input/test.csv')#.head(200)
-    df_test = df_test.fillna(' ')
+    # df_test = pd.read_csv('./input/test.csv')#.head(200)
+    # df_test = df_test.fillna('empty question')
+    # df_test['question1'] = df_test['question1'].map(lambda x: str(x).lower().split())
+    # df_test['question2'] = df_test['question2'].map(lambda x: str(x).lower().split())
 
-    df_test['question1'] = df_test['question1'].map(lambda x: str(x).lower().split())
-    df_test['question2'] = df_test['question2'].map(lambda x: str(x).lower().split())
-
-    x_test = build_features(df_test, stops, weights)
-    print("Test features built")
-    x_test = pd.concat((x_test, test_leaky), axis=1)
+    # x_test = build_features(df_test, stops, weights)
+    # print("Test features built")
+    # x_test = pd.concat((x_test, test_leaky), axis=1)
     d_test = xgb.DMatrix(x_test)
+    print("Predicting test")
     p_test = bst.predict(d_test)
     sub = pd.DataFrame()
-    sub['test_id'] = df_test['test_id']
+    sub['test_id'] = test_id
     sub['is_duplicate'] = p_test
+    print("Saving results")
     sub.to_csv('./submissions/xgb.csv', index=False)
+
+    p_train = bst.predict(xgb.DMatrix(X_train))
+    sub = pd.DataFrame()
+    sub['prob'] = p_train
+    print("Saving results of train")
+    sub.to_csv('./submissions/xgb_train.csv', index=False)
+
+def runRf(X_train, y_train, x_test, test_id):
+
+    rf = RandomForestClassifier(n_estimators=100)
+    rf.fit(X_train, y_train)
+    pred = rf.predict_proba(x_test)
+
+    sub = pd.DataFrame()
+    sub['test_id'] = test_id
+    sub['is_duplicate'] = pred[:,1]
+    print("Saving results")
+    sub.to_csv('./submissions/rf.csv', index=False)
 
 
 def main():
+    hd = 200
+    df_train = pd.read_csv('./input/train.csv')#.head(hd)
+    df_train = df_train.fillna('empty question')
+    df_train["question1"] = df_train["question1"].map(lambda x: text_to_wordlist(x, True, True))
+    df_train["question2"] = df_train["question2"].map(lambda x: text_to_wordlist(x, True, True))
 
-    df_train = pd.read_csv('./input/train.csv')#.head(2000)
-    df_train = df_train.fillna(' ')
+    df_train_fea = pd.read_csv("./input/train_features.csv", encoding="ISO-8859-1")#.head(hd)
+    df_train_fea = df_train_fea.iloc[:, 2:-1]
+    df_train_fea.drop(["euclidean_distance", "jaccard_distance", "common_words"], axis=1, inplace=True)
 
-    df_test = pd.read_csv('./input/test.csv')#.head(200)
-    df_test = df_test.fillna(' ')
+    df_test = pd.read_csv('./input/test.csv')#.head(hd)
+    df_test = df_test.fillna('empty question')
+    df_test["question1"] = df_test ["question1"].map(lambda x: text_to_wordlist(x, True, True))
+    df_test["question2"] = df_test ["question2"].map(lambda x: text_to_wordlist(x, True, True))
     test_id = df_test["test_id"].values
+
+    df_test_fea = pd.read_csv("./input/test_features.csv", encoding="ISO-8859-1")#.head(hd)
+    df_test_fea = df_test_fea.iloc[:, 2:-1]
+    df_test_fea.drop(["euclidean_distance", "jaccard_distance", "common_words"], axis=1, inplace=True)
 
     ques = pd.concat([df_train[['question1', 'question2']], \
                       df_test[['question1', 'question2']]], axis=0).reset_index(drop='index')
@@ -310,8 +335,11 @@ def main():
 
     print('Building Features')
     X_train = build_features(df_train, stops, weights)
-    X_train = pd.concat((X_train, train_leaky), axis=1)
+    X_train = pd.concat((X_train, df_train_fea, train_leaky), axis=1)
     y_train = df_train['is_duplicate'].values
+
+    x_test = build_features(df_test, stops, weights)
+    x_test = pd.concat((x_test, df_test_fea, test_leaky), axis=1)
 
     # folds = StratifiedKFold(n_splits=5)
     # for train_index, val_inde in folds.split(X_train, y_train):
@@ -320,7 +348,8 @@ def main():
     #     y_pred = rf.predict_proba(X_train.values[val_inde])
     #     print(log_loss(y_train[val_inde], y_pred))
 
-    runXgb(X_train, y_train, stops, test_leaky, weights)
+    runXgb(X_train, y_train, stops, test_leaky, weights, x_test, test_id)
+    #runRf(X_train, y_train, x_test, test_id)
     # X_test = build_features(df_test, stops, weights)
     # X_test = pd.concat((X_test, test_leaky), axis=1)
     #
