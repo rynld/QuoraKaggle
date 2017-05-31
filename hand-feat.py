@@ -12,6 +12,7 @@ from sklearn.metrics import log_loss
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
+from sklearn.naive_bayes import BernoulliNB
 from sklearn.ensemble import RandomForestClassifier
 from TextFunctionality import text_to_wordlist
 
@@ -213,7 +214,7 @@ def build_features(data, stops, weights):
 
 def runXgb(X_train, y_train, stops, test_leaky, weights, x_test, test_id):
 
-    params = {'objective': 'binary:logistic', 'eval_metric': 'logloss', 'eta': 0.02, 'max_depth': 7, 'subsample': 0.6,
+    params = {"seed": 34, 'objective': 'binary:logistic', 'eval_metric': 'logloss', 'eta': 0.02, 'max_depth': 6, 'subsample': 0.8,
               'silent': 1, 'base_score': 0.2}
     # params['scale_pos_weight'] = 0.2
 
@@ -250,13 +251,14 @@ def runXgb(X_train, y_train, stops, test_leaky, weights, x_test, test_id):
     sub['test_id'] = test_id
     sub['is_duplicate'] = p_test
     print("Saving results")
-    sub.to_csv('./submissions/xgb.csv', index=False)
+    sub.to_csv('./submissions/xgb1.csv', index=False)
 
     p_train = bst.predict(xgb.DMatrix(X_train))
     sub = pd.DataFrame()
     sub['prob'] = p_train
     print("Saving results of train")
-    sub.to_csv('./submissions/xgb_train.csv', index=False)
+    sub.to_csv('./submissions/xgb_train1.csv', index=False)
+
 
 def runRf(X_train, y_train, x_test, test_id):
 
@@ -270,25 +272,50 @@ def runRf(X_train, y_train, x_test, test_id):
     print("Saving results")
     sub.to_csv('./submissions/rf.csv', index=False)
 
+    pred = rf.predict_proba(X_train)
+    sub = pd.DataFrame()
+    sub['prob'] = pred[:, 1]
+    print("Saving results")
+    sub.to_csv('./submissions/rf_train.csv', index=False)
+
+
+def runNaivesBayes(X_train, y_train, x_test, test_id):
+    nb = BernoulliNB()
+    nb.fit(X_train, y_train)
+    pred = nb.predict_proba(x_test)
+
+    sub = pd.DataFrame()
+    sub['test_id'] = test_id
+    sub['is_duplicate'] = pred[:, 1]
+    print("Saving results")
+    sub.to_csv('./submissions/nb.csv', index=False)
+
+    pred = nb.predict_proba(X_train)
+    sub = pd.DataFrame()
+    sub['prob'] = pred[:, 1]
+    print("Saving results")
+    sub.to_csv('./submissions/nb_train.csv', index=False)
+
 
 def main():
     hd = 200
-    df_train = pd.read_csv('./input/train.csv')#.head(hd)
+    df_train = pd.read_csv('./input/train.csv').head(hd)
     df_train = df_train.fillna('empty question')
     df_train["question1"] = df_train["question1"].map(lambda x: text_to_wordlist(x, True, True))
     df_train["question2"] = df_train["question2"].map(lambda x: text_to_wordlist(x, True, True))
 
-    df_train_fea = pd.read_csv("./input/train_features.csv", encoding="ISO-8859-1")#.head(hd)
+    df_train_fea = pd.read_csv("./input/train_features.csv", encoding="ISO-8859-1").head(hd)
     df_train_fea = df_train_fea.iloc[:, 2:-1]
     df_train_fea.drop(["euclidean_distance", "jaccard_distance", "common_words"], axis=1, inplace=True)
 
-    df_test = pd.read_csv('./input/test.csv')#.head(hd)
+    print("Read test")
+    df_test = pd.read_csv('./input/test.csv').head(hd)
     df_test = df_test.fillna('empty question')
     df_test["question1"] = df_test ["question1"].map(lambda x: text_to_wordlist(x, True, True))
     df_test["question2"] = df_test ["question2"].map(lambda x: text_to_wordlist(x, True, True))
     test_id = df_test["test_id"].values
 
-    df_test_fea = pd.read_csv("./input/test_features.csv", encoding="ISO-8859-1")#.head(hd)
+    df_test_fea = pd.read_csv("./input/test_features.csv", encoding="ISO-8859-1").head(hd)
     df_test_fea = df_test_fea.iloc[:, 2:-1]
     df_test_fea.drop(["euclidean_distance", "jaccard_distance", "common_words"], axis=1, inplace=True)
 
