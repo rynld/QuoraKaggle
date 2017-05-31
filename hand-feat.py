@@ -1,4 +1,6 @@
-import argparse
+import os
+mingw_path = 'C:\\Program Files\\mingw-w64\\x86_64-6.3.0-posix-seh-rt_v5-rev1\\mingw64\\bin'
+os.environ['PATH'] = mingw_path + ';' + os.environ['PATH']
 import functools
 from collections import defaultdict
 import numpy as np
@@ -36,7 +38,7 @@ def jaccard(row):
     uw = set(row['question1']).union(row['question2'])
     if len(uw) == 0:
         uw = [1]
-    return (len(wic) / len(uw))
+    return (len(wic) / len(uw) + 0.0001)
 
 
 def common_words(row):
@@ -198,7 +200,7 @@ def build_features(data, stops, weights):
     f = functools.partial(char_diff_unique_stop, stops=stops)
     X['char_diff_unq_stop'] = data.apply(f, axis=1, raw=True)  # 13
 
-    #     X['common_words'] = data.apply(common_words, axis=1, raw=True)  #14
+    X['common_words'] = data.apply(common_words, axis=1, raw=True)  #14
     X['total_unique_words'] = data.apply(total_unique_words, axis=1, raw=True)  # 15
 
     f = functools.partial(total_unq_words_stop, stops=stops)
@@ -209,7 +211,7 @@ def build_features(data, stops, weights):
     return X
 
 
-def runXgb(X_train, X_valid, y_train, y_valid):
+def runXgb(X_train, y_train, stops, test_leaky, weights):
 
     params = {}
     params['objective'] = 'binary:logistic'
@@ -217,38 +219,43 @@ def runXgb(X_train, X_valid, y_train, y_valid):
     params['eta'] = 0.02
     params['max_depth'] = 7
     params['subsample'] = 0.6
-    params['base_score'] = 0.2
+    params['silent'] = 1
+    #params['base_score'] = 0.2
     # params['scale_pos_weight'] = 0.2
 
     d_train = xgb.DMatrix(X_train, label=y_train)
-    d_valid = xgb.DMatrix(X_valid, label=y_valid)
+   # d_valid = xgb.DMatrix(X_valid, label=y_valid)
 
-    watchlist = [(d_train, 'train'), (d_valid, 'valid')]
+    #watchlist = [(d_train, 'train'), (d_valid, 'valid')]
+    print("Training")
+    cv_output = xgb.cv(params, d_train, num_boost_round=1000, early_stopping_rounds=20,
+                       verbose_eval=50)
+    # cv_output[['train-rmse-mean', 'test-rmse-mean']].plot()
 
-    bst = xgb.train(params, d_train, 2500, watchlist, early_stopping_rounds=50, verbose_eval=50)
-    print(log_loss(y_valid, bst.predict(d_valid)))
+    num_boost_rounds = len(cv_output)
+    bst = xgb.train(dict(params), d_train, num_boost_round=num_boost_rounds)
+
+    #bst = xgb.train(params, d_train, num_boost_round=500, verbose_eval=10)
+    #print(log_loss(y_valid, bst.predict(d_valid)))
     #bst.save_model(args.save + '.mdl')
 
     print('Building Test Features')
-    df_test = pd.read_csv('../data/test_features.csv', encoding="ISO-8859-1")
-    x_test_ab = df_test.iloc[:, 2:-1]
-    x_test_ab = x_test_ab.drop('euclidean_distance', axis=1)
-    x_test_ab = x_test_ab.drop('jaccard_distance', axis=1)
 
-    df_test = pd.read_csv('../data/test.csv')
+    df_test = pd.read_csv('./input/test.csv')#.head(200)
     df_test = df_test.fillna(' ')
 
     df_test['question1'] = df_test['question1'].map(lambda x: str(x).lower().split())
     df_test['question2'] = df_test['question2'].map(lambda x: str(x).lower().split())
 
     x_test = build_features(df_test, stops, weights)
-    x_test = pd.concat((x_test, x_test_ab, test_leaky), axis=1)
+    print("Test features built")
+    x_test = pd.concat((x_test, test_leaky), axis=1)
     d_test = xgb.DMatrix(x_test)
     p_test = bst.predict(d_test)
     sub = pd.DataFrame()
     sub['test_id'] = df_test['test_id']
     sub['is_duplicate'] = p_test
-    sub.to_csv('../predictions/' + args.save + '.csv')
+    sub.to_csv('./submissions/xgb.csv', index=False)
 
 
 def main():
@@ -256,9 +263,10 @@ def main():
     df_train = pd.read_csv('./input/train.csv')#.head(2000)
     df_train = df_train.fillna(' ')
 
-    df_test = pd.read_csv('./input/test.csv')#.head(20)
+    df_test = pd.read_csv('./input/test.csv')#.head(200)
     df_test = df_test.fillna(' ')
-    test_id = df_test["test_id"]
+    test_id = df_test["test_id"].values
+
     ques = pd.concat([df_train[['question1', 'question2']], \
                       df_test[['question1', 'question2']]], axis=0).reset_index(drop='index')
     q_dict = defaultdict(set)
@@ -302,7 +310,6 @@ def main():
 
     print('Building Features')
     X_train = build_features(df_train, stops, weights)
-
     X_train = pd.concat((X_train, train_leaky), axis=1)
     y_train = df_train['is_duplicate'].values
 
@@ -313,17 +320,18 @@ def main():
     #     y_pred = rf.predict_proba(X_train.values[val_inde])
     #     print(log_loss(y_train[val_inde], y_pred))
 
-    X_test = build_features(df_test, stops, weights)
-    X_test = pd.concat((X_test, test_leaky), axis=1)
-
-    rf = RandomForestClassifier(100)
-    rf.fit(X_train, y_train)
-    pred = rf.predict_proba(X_test)
-
-    res = pd.DataFrame()
-    res["test_id"] = test_id
-    res["is_duplicate"] = pred[:,1]
-    res.to_csv("./submissions/rf.csv", index=False)
+    runXgb(X_train, y_train, stops, test_leaky, weights)
+    # X_test = build_features(df_test, stops, weights)
+    # X_test = pd.concat((X_test, test_leaky), axis=1)
+    #
+    # rf = RandomForestClassifier(100)
+    # rf.fit(X_train, y_train)
+    # pred = rf.predict_proba(X_test)
+    #
+    # res = pd.DataFrame()
+    # res["test_id"] = test_id
+    # res["is_duplicate"] = pred[:,1]
+    # res.to_csv("./submissions/rf.csv", index=False)
 
 if __name__ == '__main__':
     main()

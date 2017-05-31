@@ -4,7 +4,7 @@ from collections import defaultdict
 
 import numpy as np
 import pandas as pd
-import xgboost as xgb
+import xgbst as xgb
 
 from nltk.corpus import stopwords
 from collections import Counter

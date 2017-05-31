@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import xgboost as xgb
+import xgbst as xgb
 import datetime
 
 tr = pd.read_csv('./input/train.csv')#.head(100)

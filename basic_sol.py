@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
-import xgboost as xgb
+import xgbst as xgb
 import datetime
 from TextFunctionality import *
 from Algo import *
